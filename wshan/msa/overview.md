@@ -129,6 +129,118 @@ public class GameEventStore
 }
 ```
 
+### 3.3 CQRS (Command Query Responsibility Segregation)
+- 명령(Command)과 조회(Query)의 책임 분리
+- 읽기/쓰기 모델 분리로 성능 최적화
+- 이벤트 소싱과 함께 사용 가능
+
+```csharp
+// 명령 모델
+public class GameCommandService
+{
+    private readonly IGameRepository _repository;
+    private readonly IEventBus _eventBus;
+
+    public async Task CreateGame(GameCommand command)
+    {
+        var game = new Game(command);
+        await _repository.Save(game);
+        await _eventBus.Publish(new GameCreatedEvent(game));
+    }
+}
+
+// 조회 모델
+public class GameQueryService
+{
+    private readonly IGameReadModel _readModel;
+
+    public async Task<GameView> GetGameView(Guid gameId)
+    {
+        return await _readModel.GetGameView(gameId);
+    }
+}
+
+// 이벤트 핸들러
+public class GameEventHandler
+{
+    private readonly IGameReadModel _readModel;
+
+    public async Task Handle(GameCreatedEvent @event)
+    {
+        await _readModel.UpdateGameView(@event.Game);
+    }
+}
+```
+
+### 3.4 Saga 패턴
+- 분산 트랜잭션 관리
+- 장기 실행 프로세스 처리
+- 보상 트랜잭션을 통한 일관성 유지
+
+```csharp
+// Saga 정의
+public class GameMatchSaga
+{
+    private readonly IGameService _gameService;
+    private readonly IUserService _userService;
+    private readonly IMatchmakingService _matchmakingService;
+
+    public async Task StartMatchmaking(MatchRequest request)
+    {
+        try
+        {
+            // 1. 사용자 검증
+            var user = await _userService.ValidateUser(request.UserId);
+            
+            // 2. 매치메이킹 시작
+            var match = await _matchmakingService.CreateMatch(request);
+            
+            // 3. 게임 서버 할당
+            var gameServer = await _gameService.AllocateServer(match);
+            
+            // 4. 게임 세션 생성
+            await _gameService.CreateGameSession(match, gameServer);
+        }
+        catch (Exception ex)
+        {
+            // 보상 트랜잭션 실행
+            await Compensate(request);
+            throw;
+        }
+    }
+
+    private async Task Compensate(MatchRequest request)
+    {
+        // 실패한 단계에 따라 보상 작업 수행
+        await _matchmakingService.CancelMatch(request.MatchId);
+        await _gameService.ReleaseServer(request.GameServerId);
+    }
+}
+
+// Saga 상태 관리
+public class SagaState
+{
+    public Guid SagaId { get; set; }
+    public string CurrentStep { get; set; }
+    public bool IsCompleted { get; set; }
+    public Dictionary<string, object> Data { get; set; }
+}
+
+// Saga 저장소
+public class SagaRepository
+{
+    public async Task SaveSagaState(SagaState state)
+    {
+        // Saga 상태 저장
+    }
+
+    public async Task<SagaState> GetSagaState(Guid sagaId)
+    {
+        // Saga 상태 조회
+    }
+}
+```
+
 ## 4. 모니터링과 로깅
 
 ### 4.1 분산 추적

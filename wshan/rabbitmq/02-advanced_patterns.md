@@ -161,6 +161,31 @@ var args = new Dictionary<string, object>
 channel.QueueDeclare("queue", true, false, false, args);
 ```
 
+### 3.3 쿼럼 큐
+- Raft 합의 알고리즘 기반의 큐
+- 고가용성과 데이터 일관성 보장
+- 미러링 큐보다 더 강력한 내결함성 제공
+
+```csharp
+var args = new Dictionary<string, object>
+{
+    { "x-queue-type", "quorum" },
+    { "x-quorum-initial-group-size", 3 } // 최소 노드 수
+};
+channel.QueueDeclare("quorum_queue", true, false, false, args);
+```
+
+### 3.4 Paxos와 Raft
+- **Paxos**: 분산 시스템에서 합의를 달성하기 위한 알고리즘
+  - 제안자(Proposer), 수락자(Acceptor), 학습자(Learner) 역할
+  - 메시지 지연과 노드 실패에도 안정적인 합의 가능
+  - 복잡한 구현 때문에 실제 시스템에서는 변형된 형태로 사용
+
+- **Raft**: Paxos를 단순화한 합의 알고리즘
+  - 리더 선출, 로그 복제, 안전성 보장
+  - 이해하기 쉽고 구현이 간단
+  - RabbitMQ의 쿼럼 큐에서 사용
+
 ## 4. 성능 최적화
 
 ### 4.1 배치 처리
@@ -252,3 +277,4 @@ groups:
         annotations:
           summary: "높은 메시지 발행률"
           description: "5분 동안 평균 메시지 발행률이 1000을 초과했습니다" 
+```

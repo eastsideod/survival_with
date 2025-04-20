@@ -76,27 +76,108 @@ spec:
 
 ## 5. Pod 생명주기 관리
 ### 5.1 프로브(Probes)
+- 컨테이너의 상태를 주기적으로 확인하는 메커니즘
+- 컨테이너가 정상적으로 동작하는지 모니터링
+- 세 가지 타입의 프로브 지원:
+  - Liveness Probe: 컨테이너가 살아있는지 확인
+  - Readiness Probe: 컨테이너가 요청을 처리할 준비가 되었는지 확인
+  - Startup Probe: 컨테이너가 시작되었는지 확인
+
+#### 5.1.1 Liveness Probe
+- 컨테이너가 정상적으로 동작하는지 확인
+- 실패 시 컨테이너 재시작
+- 주요 사용 사례:
+  - 데드락 상태 감지
+  - 애플리케이션 응답 없음 감지
+  - 무한 루프 상태 감지
+
 ```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: nginx
-spec:
-  containers:
-  - name: nginx
-    image: nginx:1.14.2
-    livenessProbe:
-      httpGet:
-        path: /
-        port: 80
-      initialDelaySeconds: 15
-      periodSeconds: 20
-    readinessProbe:
-      httpGet:
-        path: /
-        port: 80
-      initialDelaySeconds: 5
-      periodSeconds: 10
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  timeoutSeconds: 1
+  successThreshold: 1
+  failureThreshold: 3
+```
+
+#### 5.1.2 Readiness Probe
+- 컨테이너가 서비스 요청을 처리할 준비가 되었는지 확인
+- 실패 시 서비스 엔드포인트에서 제외
+- 주요 사용 사례:
+  - 애플리케이션 초기화 완료 확인
+  - 외부 의존성 준비 상태 확인
+  - 트래픽 처리 가능 상태 확인
+
+```yaml
+readinessProbe:
+  exec:
+    command:
+    - cat
+    - /tmp/healthy
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+#### 5.1.3 Startup Probe
+- 느리게 시작하는 컨테이너를 위한 프로브
+- 다른 프로브가 시작되기 전에 완료되어야 함
+- 주요 사용 사례:
+  - 오래 걸리는 초기화 과정이 있는 경우
+  - 레거시 애플리케이션의 시작 시간이 긴 경우
+
+```yaml
+startupProbe:
+  tcpSocket:
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+```
+
+#### 5.1.4 프로브 설정 옵션
+- initialDelaySeconds: 첫 번째 프로브 실행 전 대기 시간
+- periodSeconds: 프로브 실행 간격
+- timeoutSeconds: 프로브 타임아웃 시간
+- successThreshold: 성공으로 판단하기 위한 연속 성공 횟수
+- failureThreshold: 실패로 판단하기 위한 연속 실패 횟수
+
+#### 5.1.5 프로브 타입
+1. HTTP GET 프로브:
+```yaml
+httpGet:
+  path: /healthz
+  port: 8080
+  httpHeaders:
+  - name: Custom-Header
+    value: Awesome
+```
+
+2. TCP 소켓 프로브:
+```yaml
+tcpSocket:
+  port: 8080
+```
+
+3. Exec 프로브:
+```yaml
+exec:
+  command:
+  - cat
+  - /tmp/healthy
+```
+
+#### 5.1.6 프로브 모니터링
+```bash
+# Pod 상태 확인
+kubectl describe pod <pod-name>
+
+# 컨테이너 로그 확인
+kubectl logs <pod-name> -c <container-name>
+
+# 프로브 이벤트 확인
+kubectl get events --field-selector involvedObject.name=<pod-name>
 ```
 
 ## 6. Pod 관리 명령어

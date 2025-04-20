@@ -103,10 +103,13 @@
 ## 2. REST API 설계 패턴
 
 ### 2.1 컨트롤러 구조
+API 컨트롤러는 REST API의 엔드포인트를 정의하고 요청을 처리하는 핵심 컴포넌트입니다.
+
+1. **기본 구조**
 ```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
+[ApiController]                    // API 컨트롤러임을 명시
+[Route("api/[controller]")]        // 기본 라우트 패턴
+public class UsersController : ControllerBase  // ControllerBase 상속
 {
     private readonly IUserService _userService;
     private readonly ILogger<UsersController> _logger;
@@ -119,6 +122,7 @@ public class UsersController : ControllerBase
         _logger = logger;
     }
 
+    // GET /api/users
     [HttpGet]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
     {
@@ -126,6 +130,7 @@ public class UsersController : ControllerBase
         return Ok(users);
     }
 
+    // GET /api/users/{id}
     [HttpGet("{id}")]
     public async Task<ActionResult<UserDto>> GetUser(int id)
     {
@@ -138,6 +143,98 @@ public class UsersController : ControllerBase
 }
 ```
 
+2. **주요 어트리뷰트**
+   - `[ApiController]`: API 컨트롤러임을 명시
+     * 자동 모델 검증
+     * 바인딩 소스 추론
+     * 문제 세부 정보 반환
+   - `[Route]`: 엔드포인트 URL 패턴 정의
+   - `[HttpGet]`, `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`: HTTP 메서드 지정
+   - `[FromBody]`, `[FromQuery]`, `[FromRoute]`: 데이터 바인딩 소스 지정
+
+3. **응답 형식**
+   - `ActionResult<T>`: 타입이 지정된 응답
+   - `IActionResult`: 동적 응답
+   - 상태 코드 메서드:
+     * `Ok()`: 200 OK
+     * `Created()`: 201 Created
+     * `BadRequest()`: 400 Bad Request
+     * `NotFound()`: 404 Not Found
+     * `NoContent()`: 204 No Content
+
+4. **게임 서버에서의 활용 예시**
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class GameController : ControllerBase
+{
+    private readonly IGameService _gameService;
+    private readonly ILogger<GameController> _logger;
+
+    public GameController(
+        IGameService gameService,
+        ILogger<GameController> logger)
+    {
+        _gameService = gameService;
+        _logger = logger;
+    }
+
+    // 게임 세션 생성
+    [HttpPost("sessions")]
+    public async Task<ActionResult<GameSessionDto>> CreateSession([FromBody] CreateSessionDto request)
+    {
+        try
+        {
+            var session = await _gameService.CreateSessionAsync(request);
+            return CreatedAtAction(nameof(GetSession), new { id = session.Id }, session);
+        }
+        catch (GameException ex)
+        {
+            _logger.LogError(ex, "게임 세션 생성 실패");
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    // 게임 세션 조회
+    [HttpGet("sessions/{id}")]
+    public async Task<ActionResult<GameSessionDto>> GetSession(string id)
+    {
+        var session = await _gameService.GetSessionAsync(id);
+        if (session == null)
+            return NotFound();
+            
+        return Ok(session);
+    }
+
+    // 게임 상태 업데이트
+    [HttpPut("sessions/{id}/state")]
+    public async Task<IActionResult> UpdateGameState(
+        string id,
+        [FromBody] UpdateGameStateDto state)
+    {
+        try
+        {
+            await _gameService.UpdateGameStateAsync(id, state);
+            return NoContent();
+        }
+        catch (GameException ex)
+        {
+            _logger.LogError(ex, "게임 상태 업데이트 실패");
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+}
+```
+
+5. **모범 사례**
+   - 단일 책임 원칙: 각 컨트롤러는 하나의 리소스만 처리
+   - 비즈니스 로직은 서비스 계층에 위임
+   - 적절한 상태 코드 사용
+   - 일관된 응답 형식 유지
+   - 예외 처리와 로깅
+   - 입력 데이터 검증
+   - 비동기 처리 사용
+
 ### 2.2 DTO 패턴
 DTO(Data Transfer Object) 패턴은 데이터베이스의 스키마와 클라이언트에게 보여줄 데이터 구조를 분리하기 위한 패턴입니다.
 
@@ -147,7 +244,56 @@ DTO(Data Transfer Object) 패턴은 데이터베이스의 스키마와 클라이
    - 각 상황(목록 조회, 상세 조회, 생성 등)에 맞는 최적의 데이터 구조 제공
    - 양방향 데이터 전송에 사용 (클라이언트 ↔ 서버)
 
-2. **DTO의 양방향 사용**
+2. **DTO 구현 방식: struct vs class**
+   - **struct 사용**
+     ```csharp
+     // struct를 사용한 DTO 예시
+     public struct PointDto
+     {
+         public int X { get; set; }
+         public int Y { get; set; }
+     }
+     ```
+     - 장점:
+       * 작은 크기의 데이터에 적합
+       * 값 타입으로 인한 성능 이점 (작은 데이터의 경우)
+       * 스택 할당으로 인한 가비지 컬렉션 부담 감소
+     - 단점:
+       * 큰 데이터의 경우 복사 비용 발생
+       * null 허용이 제한적
+       * 변경 불가능한 구조의 경우 데이터 수정 어려움
+       * 유효성 검사가 제한적
+
+   - **class 사용 (권장)**
+     ```csharp
+     // class를 사용한 DTO 예시
+     public class PlayerPositionDto
+     {
+         public int X { get; set; }
+         public int Y { get; set; }
+         public string PlayerId { get; set; }
+         public DateTime Timestamp { get; set; }
+     }
+     ```
+     - 장점:
+       * 참조 타입으로 인한 유연성
+       * null 허용
+       * 상속과 다형성 지원
+       * 유효성 검사 어트리뷰트 사용 가능
+       * 데이터 수정이 용이
+     - 단점:
+       * 힙 할당으로 인한 가비지 컬렉션 부담
+       * 작은 데이터의 경우 오버헤드 발생 가능
+
+   - **선택 기준**
+     * 대부분의 경우 class 사용을 권장
+     * struct는 다음 조건을 모두 만족할 때만 고려:
+       - 데이터 크기가 매우 작음 (16바이트 이하)
+       - 변경이 필요 없는 읽기 전용 데이터
+       - 성능이 매우 중요한 경우
+       - null을 허용할 필요가 없는 경우
+
+3. **DTO의 양방향 사용**
    ```csharp
    // 1. 클라이언트 → 서버 (입력용 DTO)
    public class CreateUserDto
@@ -173,7 +319,7 @@ DTO(Data Transfer Object) 패턴은 데이터베이스의 스키마와 클라이
    }
    ```
 
-3. **DTO 사용 예시 (양방향)**
+4. **DTO 사용 예시 (양방향)**
    ```csharp
    [ApiController]
    [Route("api/[controller]")]
@@ -498,20 +644,29 @@ public async Task<ActionResult<PagedResponse<IEnumerable<UserDto>>>> GetUsers(
      Vary: Accept-Encoding
      ```
 
-   - 서버 측 캐싱
+   - 캐싱 지속 시간 우선순위
      ```csharp
-     // 메모리 캐시
-     if (_memoryCache.TryGetValue(cacheKey, out UserDto cachedUser))
+     [ApiController]
+     [Route("api/[controller]")]
+     [ResponseCache(Duration = 60)]  // 컨트롤러 레벨: 60초
+     public class UsersController : ControllerBase
      {
-         return Ok(cachedUser);
+         [HttpGet]
+         [ResponseCache(Duration = 30)]  // 액션 메서드 레벨: 30초
+         public IActionResult GetUsers()
+         {
+             // 이 엔드포인트는 30초 동안 캐시됨
+         }
+
+         [HttpGet("{id}")]
+         public IActionResult GetUser(int id)
+         {
+             // 이 엔드포인트는 60초 동안 캐시됨
+         }
      }
-
-     // 분산 캐시 (Redis)
-     var cachedUser = await _distributedCache.GetStringAsync(cacheKey);
      ```
+     - 더 구체적인 설정이 더 일반적인 설정을 덮어씁니다
+     - 액션 메서드의 설정이 컨트롤러의 설정보다 우선합니다
+     - 이는 캐싱뿐만 아니라 다른 어트리뷰트에도 동일하게 적용됩니다
 
-   - 캐시 무효화
-     ```csharp
-     _memoryCache.Remove(cacheKey);
-     // 또는
-     await _distributedCache.RemoveAsync(cacheKey);
+   - 서버 측 캐싱

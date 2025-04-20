@@ -82,6 +82,34 @@ HTTP 요청은 웹 애플리케이션과 서버 간의 통신에서 가장 기�
     - ASP.NET Core에서는 `[FromCookie]` 어트리뷰트로 받을 수 있음
     - 보안을 위해 중요한 정보(비밀번호, 개인정보 등)는 쿠키에 저장하지 않는 것이 좋음
 
+  - **X- 접두사가 붙는 헤더**
+    - 비표준 또는 실험적인 HTTP 헤더를 나타내는 접두사
+    - 주요 사용 사례:
+      - **실험적 기능**
+        - `X-Experimental-Feature`: 새로운 기능 테스트
+        - `X-API-Version`: API 버전 정보
+      - **보안 관련**
+        - `X-Forwarded-For`: 클라이언트의 실제 IP 주소
+        - `X-Request-ID`: 요청 추적을 위한 고유 식별자
+        - `X-CSRF-Token`: CSRF 공격 방지를 위한 토큰
+      - **게임 서버 관련**
+        - `X-Game-Version`: 게임 클라이언트 버전
+        - `X-Player-ID`: 플레이어 식별자
+        - `X-Server-Region`: 서버 지역 정보
+    - 주의사항:
+      - 표준화된 헤더가 있는 경우 X- 접두사 사용을 피하는 것이 좋음
+      - 예: `X-Requested-With` 대신 `Sec-Fetch-Site` 사용
+      - 실험적 헤더가 표준으로 채택되면 X- 접두사 제거 권장
+    - ASP.NET Core에서의 사용:
+      ```csharp
+      // X- 헤더 읽기
+      var gameVersion = Request.Headers["X-Game-Version"];
+      var playerId = Request.Headers["X-Player-ID"];
+
+      // X- 헤더 설정
+      Response.Headers.Add("X-Server-Region", "Asia");
+      ```
+
 - ASP.NET Core에서 헤더 접근:
   ```csharp
   var contentType = Request.Headers["Content-Type"];
